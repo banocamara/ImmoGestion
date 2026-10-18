@@ -1,0 +1,24 @@
+# Fichiers système
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Fichiers temporaires
+
+*.log
+*.tmp
+
+# Variables et secrets locaux
+
+.env
+.env.*
+
+# Fichiers générés par les outils
+
+.vscode/
+.idea/
+
+# Dépendances PHP, si Composer est utilisé ultérieurement
+
+/vendor/
