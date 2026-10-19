@@ -36,6 +36,11 @@
     📊 Suivi des loyers
 </a>
 
+<a href="/ImmoGestion/travaux/depenses.php" class="nav-link">
+    <span>🧾</span>
+    <span>Dépenses</span>
+</a>
+
 <a href="/ImmoGestion/travaux/index.php">
     🔧 Travaux
 </a>
