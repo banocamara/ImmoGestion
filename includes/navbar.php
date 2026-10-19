@@ -1,6 +1,5 @@
 <aside class="sidebar" id="sidebar">
 
-```
 <div class="brand">
     Immo<span>Gestion</span>
 </div>
@@ -25,8 +24,16 @@
     👥 Locataires
 </a>
 
+<a href="/ImmoGestion/locations/index.php">
+    📝 Locations
+</a>
+
 <a href="/ImmoGestion/paiements/index.php">
     💰 Paiements
+</a>
+
+<a href="/ImmoGestion/paiements/soldes.php">
+    📊 Suivi des loyers
 </a>
 
 <a href="/ImmoGestion/travaux/index.php">
@@ -42,7 +49,6 @@
     </a>
 
 <?php endif; ?>
-```
 
 </aside>
 

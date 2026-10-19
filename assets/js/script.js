@@ -3,7 +3,7 @@ const menuToggle = document.getElementById('menuToggle');
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('sidebarOverlay');
 
-```
+
 if (!menuToggle || !sidebar || !overlay) {
     return;
 }
@@ -19,6 +19,6 @@ menuToggle.addEventListener('click', function () {
 });
 
 overlay.addEventListener('click', fermerMenu);
-```
+
 
 });

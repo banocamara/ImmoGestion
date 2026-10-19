@@ -43,7 +43,6 @@ $nom = $_SESSION['nom'] ?? 'Utilisateur';
 
 <div class="app-layout">
 
-```
 <?php require_once __DIR__ . '/includes/navbar.php'; ?>
 
 <main class="main-content">
@@ -149,11 +148,10 @@ $nom = $_SESSION['nom'] ?? 'Utilisateur';
     </section>
 
 </main>
-```
 
 </div>
 
-<script src="assets/js/script.js"></script>
-
+<script src="assets/js/script.js"></script>;
+<?php require_once __DIR__ . '/includes/footer.php'; ?>
 </body>
 </html>

@@ -84,7 +84,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body class="login-page">
 
-```
 <main class="login-card">
 
     <div class="login-logo">IG</div>
@@ -146,7 +145,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
 
 </main>
-```
 
 </body>
 </html>
