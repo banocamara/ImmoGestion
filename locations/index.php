@@ -10,40 +10,56 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Récupérer les messages
+// Récupérer le message
 $message = $_SESSION['message'] ?? '';
 unset($_SESSION['message']);
 
-// Récupérer les locations avec les informations des appartements et des locataires
+// Récupérer les locations
 $sql = "
     SELECT
-        locations.id,
-        locations.date_debut,
-        locations.date_fin,
-        locations.loyer_mensuel,
-        locations.jour_echeance,
-        locations.statut,
-        appartements.numero AS numero_appartement,
-        maisons.nom AS nom_maison,
-        locataires.nom AS nom_locataire,
-        locataires.prenom AS prenom_locataire
-    FROM locations
-    INNER JOIN appartements
-        ON locations.appartement_id = appartements.id
-    INNER JOIN maisons
-        ON appartements.maison_id = maisons.id
-    INNER JOIN locataires
-        ON locations.locataire_id = locataires.id
-    ORDER BY locations.id DESC
+        l.id,
+        l.date_debut,
+        l.date_fin,
+        l.loyer_mensuel,
+        l.jour_echeance,
+        l.statut,
+        a.numero AS numero_appartement,
+        m.nom AS nom_maison,
+        loc.nom AS nom_locataire,
+        loc.prenom AS prenom_locataire
+    FROM locations l
+    INNER JOIN appartements a ON l.appartement_id = a.id
+    INNER JOIN maisons m ON a.maison_id = m.id
+    INNER JOIN locataires loc ON l.locataire_id = loc.id
 ";
 
-$stmt = $pdo->query($sql);
-$locations = $stmt->fetchAll();
+$params = [];
+
+// Un administrateur ne consulte que les locations de ses maisons attribuées
+if (!estSuperAdmin()) {
+    $sql .= "
+        INNER JOIN affectations_admins aa
+            ON aa.maison_id = m.id
+    ";
+
+    $sql .= "
+        WHERE aa.utilisateur_id = :utilisateur_id
+    ";
+
+    $params['utilisateur_id'] = $_SESSION['utilisateur_id']
+        ?? $_SESSION['user_id']
+        ?? 0;
+}
+
+$sql .= " ORDER BY l.id DESC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$locations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $titrePage = 'Gestion des locations';
 
 require_once __DIR__ . '/../includes/header.php';
-
 ?>
 
 <div class="app-layout">
@@ -60,7 +76,9 @@ require_once __DIR__ . '/../includes/header.php';
 
             <div class="page-heading">
                 <h2>Contrats de location</h2>
-                <p>Consultez les locations et suivez les contrats de vos locataires.</p>
+                <p>
+                    Consultez les locations et suivez les contrats de vos locataires.
+                </p>
             </div>
 
             <?php if ($message !== ''): ?>
@@ -89,7 +107,8 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <div class="table-responsive">
 
-                        <table>
+                        <table class="table">
+
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -111,21 +130,19 @@ require_once __DIR__ . '/../includes/header.php';
 
                                     <tr>
 
-                                        <!-- Identifiant de la location -->
                                         <td>
                                             <?= (int) $location['id'] ?>
                                         </td>
 
-                                        <!-- Nom du locataire -->
                                         <td>
                                             <?= htmlspecialchars(
-                                                $location['nom_locataire'] . ' ' . $location['prenom_locataire'],
+                                                $location['nom_locataire'] . ' ' .
+                                                $location['prenom_locataire'],
                                                 ENT_QUOTES,
                                                 'UTF-8'
                                             ) ?>
                                         </td>
 
-                                        <!-- Maison -->
                                         <td>
                                             <?= htmlspecialchars(
                                                 $location['nom_maison'],
@@ -134,7 +151,6 @@ require_once __DIR__ . '/../includes/header.php';
                                             ) ?>
                                         </td>
 
-                                        <!-- Appartement -->
                                         <td>
                                             <?= htmlspecialchars(
                                                 $location['numero_appartement'],
@@ -143,22 +159,19 @@ require_once __DIR__ . '/../includes/header.php';
                                             ) ?>
                                         </td>
 
-                                        <!-- Loyer mensuel -->
                                         <td>
                                             <?= number_format(
                                                 (float) $location['loyer_mensuel'],
                                                 2,
                                                 ',',
                                                 ' '
-                                            ) ?>
+                                            ) ?> MRU
                                         </td>
 
-                                        <!-- Jour d'échéance -->
                                         <td>
                                             Le <?= (int) $location['jour_echeance'] ?>
                                         </td>
 
-                                        <!-- Date de début -->
                                         <td>
                                             <?= htmlspecialchars(
                                                 $location['date_debut'],
@@ -167,7 +180,6 @@ require_once __DIR__ . '/../includes/header.php';
                                             ) ?>
                                         </td>
 
-                                        <!-- Date de fin -->
                                         <td>
                                             <?php if ($location['date_fin'] !== null): ?>
                                                 <?= htmlspecialchars(
@@ -180,7 +192,6 @@ require_once __DIR__ . '/../includes/header.php';
                                             <?php endif; ?>
                                         </td>
 
-                                        <!-- Statut -->
                                         <td>
                                             <?php if ($location['statut'] === 'active'): ?>
 
@@ -203,13 +214,12 @@ require_once __DIR__ . '/../includes/header.php';
                                             <?php endif; ?>
                                         </td>
 
-                                        <!-- Actions -->
                                         <td>
                                             <?php if (estSuperAdmin()): ?>
 
                                                 <a
                                                     href="modifier.php?id=<?= (int) $location['id'] ?>"
-                                                    class="btn btn-primary"
+                                                    class="btn btn-primary btn-sm"
                                                 >
                                                     Modifier
                                                 </a>
@@ -226,6 +236,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endforeach; ?>
 
                             </tbody>
+
                         </table>
 
                     </div>

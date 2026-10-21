@@ -1,30 +1,48 @@
 <?php
+
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../config/database.php';
 
 exigerConnexion();
 
 $titrePage = 'Suivi des loyers';
 
-// Mois sélectionné : mois courant par défaut
+$utilisateurId = (int) $_SESSION['utilisateur_id'];
+$estSuperAdmin = estSuperAdmin();
+
+/*
+|--------------------------------------------------------------------------
+| Vérifier le mois demandé
+|--------------------------------------------------------------------------
+*/
+
 $mois = $_GET['mois'] ?? date('Y-m');
 
-if (!preg_match('/^\d{4}-\d{2}$/', $mois)) {
+if (!is_string($mois) || !preg_match('/^(\d{4})-(\d{2})$/', $mois, $matches)) {
     $mois = date('Y-m');
+} else {
+    $annee = (int) $matches[1];
+    $numeroMois = (int) $matches[2];
+
+    if (!checkdate($numeroMois, 1, $annee)) {
+        $mois = date('Y-m');
+    }
 }
 
-$numeroMois = (int) substr($mois, 5, 2);
-$annee = (int) substr($mois, 0, 4);
-
-if (!checkdate($numeroMois, 1, $annee)) {
-    $mois = date('Y-m');
-}
-
-// Première et dernière date du mois
 $dateDebutMois = $mois . '-01';
 $dateFinMois = date('Y-m-t', strtotime($dateDebutMois));
 
-// Récupérer les locations concernées par le mois choisi
+/*
+|--------------------------------------------------------------------------
+| Récupérer les locations et leurs paiements valides
+|--------------------------------------------------------------------------
+|
+| Pour un administrateur, seules les maisons qui lui sont
+| attribuées sont visibles.
+|
+| Un paiement annulé n'est jamais inclus dans le calcul.
+|
+*/
+
 $sql = "
     SELECT
         l.id AS location_id,
@@ -32,8 +50,10 @@ $sql = "
         l.date_debut,
         l.date_fin,
         l.statut AS statut_location,
+
         loc.nom AS nom_locataire,
         loc.prenom AS prenom_locataire,
+
         a.numero AS numero_appartement,
         m.nom AS nom_maison,
 
@@ -48,43 +68,87 @@ $sql = "
     FROM locations l
 
     INNER JOIN locataires loc
-        ON l.locataire_id = loc.id
+        ON loc.id = l.locataire_id
 
     INNER JOIN appartements a
-        ON l.appartement_id = a.id
+        ON a.id = l.appartement_id
 
     INNER JOIN maisons m
-        ON a.maison_id = m.id
+        ON m.id = a.maison_id
 
     WHERE l.date_debut <= :date_fin
-      AND (l.date_fin IS NULL OR l.date_fin >= :date_debut)
+      AND (
+          l.date_fin IS NULL
+          OR l.date_fin >= :date_debut
+      )
       AND l.statut <> 'resiliee'
-
-    ORDER BY m.nom, a.numero
 ";
 
-$stmt = $pdo->prepare($sql);
-
-$stmt->execute([
+/*
+ * Filtrer les maisons accessibles aux administrateurs.
+ */
+$parametres = [
     'periode_mois' => $dateDebutMois,
     'date_fin' => $dateFinMois,
     'date_debut' => $dateDebutMois
-]);
+];
 
-$locations = $stmt->fetchAll();
+if (!$estSuperAdmin) {
+    $sql .= "
+        AND EXISTS (
+            SELECT 1
+            FROM affectations_admins aa
+            WHERE aa.maison_id = m.id
+              AND aa.utilisateur_id = :utilisateur_id
+        )
+    ";
 
-// Calculer les totaux
+    $parametres['utilisateur_id'] = $utilisateurId;
+}
+
+$sql .= "
+    ORDER BY m.nom ASC, a.numero ASC, loc.nom ASC
+";
+
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($parametres);
+
+    $locations = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+} catch (PDOException $e) {
+    error_log(
+        'Erreur lors du calcul des soldes de loyers : '
+        . $e->getMessage()
+    );
+
+    http_response_code(500);
+    exit('Impossible de charger le suivi des loyers pour le moment.');
+}
+
+/*
+|--------------------------------------------------------------------------
+| Calculer les totaux
+|--------------------------------------------------------------------------
+|
+| Le montant restant ne peut pas être négatif.
+| Si le locataire a payé plus que son loyer, le surplus reste
+| visible dans le montant payé, mais le reste dû est de zéro.
+|
+*/
+
 $totalLoyers = 0;
 $totalPaye = 0;
 $totalRestant = 0;
 
 foreach ($locations as &$location) {
-    $loyer = (float) $location['loyer_mensuel'];
-    $paye = (float) $location['montant_paye'];
+
+    $loyer = max(0, (float) $location['loyer_mensuel']);
+    $paye = max(0, (float) $location['montant_paye']);
 
     $restant = max(0, $loyer - $paye);
 
-    if ($paye >= $loyer) {
+    if ($paye >= $loyer && $loyer > 0) {
         $statutPaiement = 'Payé';
     } elseif ($paye > 0) {
         $statutPaiement = 'Partiellement payé';
@@ -96,12 +160,29 @@ foreach ($locations as &$location) {
     $location['statut_paiement'] = $statutPaiement;
 
     $totalLoyers += $loyer;
-    $totalPaye += min($paye, $loyer);
+    $totalPaye += $paye;
     $totalRestant += $restant;
 }
+
 unset($location);
 
+/*
+|--------------------------------------------------------------------------
+| Préparer l'affichage
+|--------------------------------------------------------------------------
+*/
+
+function echapperSolde($valeur): string
+{
+    return htmlspecialchars(
+        (string) $valeur,
+        ENT_QUOTES,
+        'UTF-8'
+    );
+}
+
 require_once __DIR__ . '/../includes/header.php';
+
 ?>
 
 <div class="app-layout">
@@ -135,7 +216,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 name="mois"
                                 id="mois"
                                 class="form-control"
-                                value="<?= htmlspecialchars($mois, ENT_QUOTES, 'UTF-8') ?>"
+                                value="<?= echapperSolde($mois) ?>"
                                 required
                             >
                         </div>
@@ -157,7 +238,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="stat-info">
                         <h3>Total des loyers</h3>
                         <p>
-                            <?= number_format($totalLoyers, 0, ',', ' ') ?>
+                            <?= number_format($totalLoyers, 2, ',', ' ') ?>
                             MRU
                         </p>
                     </div>
@@ -167,7 +248,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="stat-info">
                         <h3>Total payé</h3>
                         <p>
-                            <?= number_format($totalPaye, 0, ',', ' ') ?>
+                            <?= number_format($totalPaye, 2, ',', ' ') ?>
                             MRU
                         </p>
                     </div>
@@ -177,7 +258,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="stat-info">
                         <h3>Reste à payer</h3>
                         <p>
-                            <?= number_format($totalRestant, 0, ',', ' ') ?>
+                            <?= number_format($totalRestant, 2, ',', ' ') ?>
                             MRU
                         </p>
                     </div>
@@ -185,13 +266,13 @@ require_once __DIR__ . '/../includes/header.php';
 
             </div>
 
-            <!-- Tableau -->
+            <!-- Tableau des loyers -->
             <div class="panel">
 
                 <div class="panel-header">
                     <h3>
                         Situation des loyers —
-                        <?= htmlspecialchars(date('m/Y', strtotime($dateDebutMois)), ENT_QUOTES, 'UTF-8') ?>
+                        <?= echapperSolde(date('m/Y', strtotime($dateDebutMois))) ?>
                     </h3>
                 </div>
 
@@ -230,34 +311,24 @@ require_once __DIR__ . '/../includes/header.php';
                                         <tr>
 
                                             <td>
-                                                <?= htmlspecialchars(
-                                                    $location['nom_locataire'] . ' ' .
-                                                    $location['prenom_locataire'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
+                                                <?= echapperSolde(
+                                                    $location['nom_locataire'] . ' '
+                                                    . $location['prenom_locataire']
                                                 ) ?>
                                             </td>
 
                                             <td>
-                                                <?= htmlspecialchars(
-                                                    $location['nom_maison'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                ) ?>
+                                                <?= echapperSolde($location['nom_maison']) ?>
                                             </td>
 
                                             <td>
-                                                <?= htmlspecialchars(
-                                                    $location['numero_appartement'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                ) ?>
+                                                <?= echapperSolde($location['numero_appartement']) ?>
                                             </td>
 
                                             <td>
                                                 <?= number_format(
                                                     (float) $location['loyer_mensuel'],
-                                                    0,
+                                                    2,
                                                     ',',
                                                     ' '
                                                 ) ?>
@@ -267,7 +338,7 @@ require_once __DIR__ . '/../includes/header.php';
                                             <td>
                                                 <?= number_format(
                                                     (float) $location['montant_paye'],
-                                                    0,
+                                                    2,
                                                     ',',
                                                     ' '
                                                 ) ?>
@@ -278,11 +349,11 @@ require_once __DIR__ . '/../includes/header.php';
                                                 <strong>
                                                     <?= number_format(
                                                         (float) $location['montant_restant'],
-                                                        0,
+                                                        2,
                                                         ',',
                                                         ' '
                                                     ) ?>
-                                                   MRU
+                                                    MRU
                                                 </strong>
                                             </td>
 
@@ -317,6 +388,31 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endif; ?>
 
                             </tbody>
+
+                            <?php if (!empty($locations)): ?>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="3">Totaux</th>
+
+                                        <th>
+                                            <?= number_format($totalLoyers, 2, ',', ' ') ?>
+                                            MRU
+                                        </th>
+
+                                        <th>
+                                            <?= number_format($totalPaye, 2, ',', ' ') ?>
+                                            MRU
+                                        </th>
+
+                                        <th>
+                                            <?= number_format($totalRestant, 2, ',', ' ') ?>
+                                            MRU
+                                        </th>
+
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            <?php endif; ?>
 
                         </table>
 

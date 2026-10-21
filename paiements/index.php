@@ -1,21 +1,67 @@
 <?php
+
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../config/database.php';
 
 exigerConnexion();
 
 $titrePage = 'Gestion des paiements';
 
-// Créer le jeton CSRF
+$utilisateurId = (int) $_SESSION['utilisateur_id'];
+$superAdmin = estSuperAdmin();
+
+/*
+|--------------------------------------------------------------------------
+| Jeton CSRF
+|--------------------------------------------------------------------------
+*/
+
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Récupérer le message de confirmation
-$messageSucces = $_SESSION['message_succes'] ?? '';
-unset($_SESSION['message_succes']);
+/*
+|--------------------------------------------------------------------------
+| Messages de retour
+|--------------------------------------------------------------------------
+*/
 
-// Récupérer tous les paiements
+$messageSucces = $_SESSION['message_succes'] ?? '';
+$messageErreur = $_SESSION['message_erreur'] ?? '';
+
+unset(
+    $_SESSION['message_succes'],
+    $_SESSION['message_erreur']
+);
+
+/*
+|--------------------------------------------------------------------------
+| Filtre des maisons accessibles
+|--------------------------------------------------------------------------
+*/
+
+$filtreMaison = '';
+
+$parametres = [];
+
+if (!$superAdmin) {
+    $filtreMaison = "
+        AND EXISTS (
+            SELECT 1
+            FROM affectations_admins aa
+            WHERE aa.maison_id = m.id
+              AND aa.utilisateur_id = :utilisateur_id
+        )
+    ";
+
+    $parametres['utilisateur_id'] = $utilisateurId;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Récupérer les paiements accessibles
+|--------------------------------------------------------------------------
+*/
+
 $sql = "
     SELECT
         p.id,
@@ -26,54 +72,143 @@ $sql = "
         p.reference,
         p.statut,
         p.commentaire,
+
         l.id AS location_id,
         l.loyer_mensuel,
+
         loc.nom AS nom_locataire,
         loc.prenom AS prenom_locataire,
+
         a.numero AS numero_appartement,
         m.nom AS nom_maison,
+
         u.nom AS nom_utilisateur
+
     FROM paiements p
-    INNER JOIN locations l ON p.location_id = l.id
-    INNER JOIN locataires loc ON l.locataire_id = loc.id
-    INNER JOIN appartements a ON l.appartement_id = a.id
-    INNER JOIN maisons m ON a.maison_id = m.id
-    INNER JOIN utilisateurs u ON p.enregistre_par = u.id
+
+    INNER JOIN locations l
+        ON p.location_id = l.id
+
+    INNER JOIN locataires loc
+        ON l.locataire_id = loc.id
+
+    INNER JOIN appartements a
+        ON l.appartement_id = a.id
+
+    INNER JOIN maisons m
+        ON a.maison_id = m.id
+
+    LEFT JOIN utilisateurs u
+        ON p.enregistre_par = u.id
+
+    WHERE 1 = 1
+    $filtreMaison
+
     ORDER BY p.date_paiement DESC, p.id DESC
 ";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute();
-$paiements = $stmt->fetchAll();
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($parametres);
 
-// Calculer le total des paiements validés
-$stmt = $pdo->prepare("
-    SELECT COALESCE(SUM(montant), 0)
-    FROM paiements
-    WHERE statut = 'valide'
-");
-$stmt->execute();
-$totalPaiements = (float) $stmt->fetchColumn();
+    $paiements = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Compter les paiements validés
-$stmt = $pdo->prepare("
-    SELECT COUNT(*)
-    FROM paiements
-    WHERE statut = 'valide'
-");
-$stmt->execute();
-$nombrePaiements = (int) $stmt->fetchColumn();
+    /*
+    |--------------------------------------------------------------------------
+    | Statistiques limitées aux maisons accessibles
+    |--------------------------------------------------------------------------
+    */
 
-// Compter les paiements annulés
-$stmt = $pdo->prepare("
-    SELECT COUNT(*)
-    FROM paiements
-    WHERE statut = 'annule'
-");
-$stmt->execute();
-$nombrePaiementsAnnules = (int) $stmt->fetchColumn();
+    $sqlStats = "
+        SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN p.statut = 'valide'
+                        THEN p.montant
+                        ELSE 0
+                    END
+                ),
+                0
+            ) AS total_paiements,
+
+            SUM(
+                CASE
+                    WHEN p.statut = 'valide'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS nombre_valides,
+
+            SUM(
+                CASE
+                    WHEN p.statut = 'annule'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS nombre_annules
+
+        FROM paiements p
+
+        INNER JOIN locations l
+            ON p.location_id = l.id
+
+        INNER JOIN appartements a
+            ON l.appartement_id = a.id
+
+        INNER JOIN maisons m
+            ON a.maison_id = m.id
+
+        WHERE 1 = 1
+        $filtreMaison
+    ";
+
+    $stmtStats = $pdo->prepare($sqlStats);
+    $stmtStats->execute($parametres);
+
+    $statistiques = $stmtStats->fetch(PDO::FETCH_ASSOC);
+
+    $totalPaiements = (float) ($statistiques['total_paiements'] ?? 0);
+    $nombrePaiements = (int) ($statistiques['nombre_valides'] ?? 0);
+    $nombrePaiementsAnnules = (int) ($statistiques['nombre_annules'] ?? 0);
+
+} catch (PDOException $e) {
+    error_log(
+        'Erreur lors du chargement des paiements : '
+        . $e->getMessage()
+    );
+
+    http_response_code(500);
+    exit('Impossible de charger les paiements pour le moment.');
+}
+
+/*
+|--------------------------------------------------------------------------
+| Fonctions d'affichage
+|--------------------------------------------------------------------------
+*/
+
+function echapperPaiementIndex($valeur): string
+{
+    return htmlspecialchars(
+        (string) $valeur,
+        ENT_QUOTES,
+        'UTF-8'
+    );
+}
+
+function formaterMontantPaiement($montant): string
+{
+    return number_format(
+        (float) $montant,
+        2,
+        ',',
+        ' '
+    );
+}
 
 require_once __DIR__ . '/../includes/header.php';
+
 ?>
 
 <div class="app-layout">
@@ -88,13 +223,16 @@ require_once __DIR__ . '/../includes/header.php';
 
         <div class="page-content">
 
+            <!-- Messages -->
             <?php if ($messageSucces !== ''): ?>
                 <div class="alert alert-success">
-                    <?= htmlspecialchars(
-                        $messageSucces,
-                        ENT_QUOTES,
-                        'UTF-8'
-                    ) ?>
+                    <?= echapperPaiementIndex($messageSucces) ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($messageErreur !== ''): ?>
+                <div class="alert alert-danger">
+                    <?= echapperPaiementIndex($messageErreur) ?>
                 </div>
             <?php endif; ?>
 
@@ -104,9 +242,10 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="stat-card">
                     <div class="stat-info">
                         <h3>Total des paiements validés</h3>
+
                         <p>
-                            <?= number_format($totalPaiements, 0, ',', ' ') ?>
-                            FCFA
+                            <?= formaterMontantPaiement($totalPaiements) ?>
+                            MRU
                         </p>
                     </div>
                 </div>
@@ -114,6 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="stat-card">
                     <div class="stat-info">
                         <h3>Paiements validés</h3>
+
                         <p><?= $nombrePaiements ?></p>
                     </div>
                 </div>
@@ -121,16 +261,18 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="stat-card">
                     <div class="stat-info">
                         <h3>Paiements annulés</h3>
+
                         <p><?= $nombrePaiementsAnnules ?></p>
                     </div>
                 </div>
 
             </div>
 
-            <!-- Tableau des paiements -->
+            <!-- Historique -->
             <div class="panel">
 
                 <div class="panel-header">
+
                     <h3>Historique des paiements</h3>
 
                     <a
@@ -139,6 +281,7 @@ require_once __DIR__ . '/../includes/header.php';
                     >
                         + Enregistrer un paiement
                     </a>
+
                 </div>
 
                 <div class="panel-body">
@@ -168,7 +311,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                                     <tr>
                                         <td colspan="10" class="text-center">
-                                            Aucun paiement enregistré pour le moment.
+                                            Aucun paiement accessible pour le moment.
                                         </td>
                                     </tr>
 
@@ -176,118 +319,113 @@ require_once __DIR__ . '/../includes/header.php';
 
                                     <?php foreach ($paiements as $paiement): ?>
 
+                                        <?php
+                                        $datePeriode = strtotime(
+                                            $paiement['periode_mois']
+                                        );
+
+                                        $dateReglement = strtotime(
+                                            $paiement['date_paiement']
+                                        );
+
+                                        $modes = [
+                                            'especes' => 'Espèces',
+                                            'virement' => 'Virement',
+                                            'mobile_money' => 'Mobile Money',
+                                            'autre' => 'Autre'
+                                        ];
+
+                                        $statut = $paiement['statut'];
+                                        ?>
+
                                         <tr>
 
-                                            <!-- Identifiant -->
                                             <td>
                                                 <?= (int) $paiement['id'] ?>
                                             </td>
 
-                                            <!-- Locataire -->
                                             <td>
-                                                <?= htmlspecialchars(
-                                                    $paiement['nom_locataire'] . ' ' .
-                                                    $paiement['prenom_locataire'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
+                                                <?= echapperPaiementIndex(
+                                                    $paiement['nom_locataire']
+                                                    . ' '
+                                                    . $paiement['prenom_locataire']
                                                 ) ?>
                                             </td>
 
-                                            <!-- Maison et appartement -->
                                             <td>
-                                                <?= htmlspecialchars(
-                                                    $paiement['nom_maison'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
+                                                <?= echapperPaiementIndex(
+                                                    $paiement['nom_maison']
                                                 ) ?>
                                                 /
-                                                <?= htmlspecialchars(
-                                                    $paiement['numero_appartement'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
+                                                <?= echapperPaiementIndex(
+                                                    $paiement['numero_appartement']
                                                 ) ?>
                                             </td>
 
-                                            <!-- Montant -->
                                             <td>
                                                 <strong>
-                                                    <?= number_format(
-                                                        (float) $paiement['montant'],
-                                                        0,
-                                                        ',',
-                                                        ' '
+                                                    <?= formaterMontantPaiement(
+                                                        $paiement['montant']
                                                     ) ?>
-                                                    FCFA
+                                                    MRU
                                                 </strong>
                                             </td>
 
-                                            <!-- Période payée -->
                                             <td>
-                                                <?= date(
-                                                    'm/Y',
-                                                    strtotime($paiement['periode_mois'])
-                                                ) ?>
+                                                <?= $datePeriode !== false
+                                                    ? date('m/Y', $datePeriode)
+                                                    : '—' ?>
                                             </td>
 
-                                            <!-- Date du paiement -->
                                             <td>
-                                                <?= date(
-                                                    'd/m/Y H:i',
-                                                    strtotime($paiement['date_paiement'])
-                                                ) ?>
+                                                <?= $dateReglement !== false
+                                                    ? date('d/m/Y H:i', $dateReglement)
+                                                    : '—' ?>
                                             </td>
 
-                                            <!-- Mode de paiement -->
                                             <td>
-                                                <?php
-                                                $modes = [
-                                                    'especes' => 'Espèces',
-                                                    'virement' => 'Virement',
-                                                    'mobile_money' => 'Mobile Money',
-                                                    'autre' => 'Autre'
-                                                ];
-                                                ?>
-
-                                                <?= htmlspecialchars(
+                                                <?= echapperPaiementIndex(
                                                     $modes[$paiement['mode_paiement']]
-                                                        ?? $paiement['mode_paiement'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
+                                                    ?? $paiement['mode_paiement']
                                                 ) ?>
                                             </td>
 
-                                            <!-- Utilisateur ayant enregistré le paiement -->
                                             <td>
-                                                <?= htmlspecialchars(
-                                                    $paiement['nom_utilisateur'],
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
+                                                <?= echapperPaiementIndex(
+                                                    $paiement['nom_utilisateur']
+                                                    ?? 'Utilisateur inconnu'
                                                 ) ?>
                                             </td>
 
-                                            <!-- Statut -->
                                             <td>
-                                                <?php if ($paiement['statut'] === 'valide'): ?>
+
+                                                <?php if ($statut === 'valide'): ?>
 
                                                     <span class="badge badge-success">
                                                         Validé
                                                     </span>
 
-                                                <?php else: ?>
+                                                <?php elseif ($statut === 'annule'): ?>
 
                                                     <span class="badge badge-danger">
                                                         Annulé
                                                     </span>
 
+                                                <?php else: ?>
+
+                                                    <span class="badge badge-secondary">
+                                                        Inconnu
+                                                    </span>
+
                                                 <?php endif; ?>
+
                                             </td>
 
-                                            <!-- Actions -->
                                             <td>
 
                                                 <?php if (
-                                                    estSuperAdmin() &&
-                                                    $paiement['statut'] === 'valide'
+                                                    $superAdmin
+                                                    && $statut === 'valide'
                                                 ): ?>
 
                                                     <form
@@ -299,10 +437,8 @@ require_once __DIR__ . '/../includes/header.php';
                                                         <input
                                                             type="hidden"
                                                             name="csrf_token"
-                                                            value="<?= htmlspecialchars(
-                                                                $_SESSION['csrf_token'],
-                                                                ENT_QUOTES,
-                                                                'UTF-8'
+                                                            value="<?= echapperPaiementIndex(
+                                                                $_SESSION['csrf_token']
                                                             ) ?>"
                                                         >
 
@@ -321,7 +457,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                                                     </form>
 
-                                                <?php elseif ($paiement['statut'] === 'annule'): ?>
+                                                <?php elseif ($statut === 'annule'): ?>
 
                                                     <span>Déjà annulé</span>
 
@@ -356,4 +492,3 @@ require_once __DIR__ . '/../includes/header.php';
     </main>
 
 </div>
-

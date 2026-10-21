@@ -1,11 +1,12 @@
-```php
 <?php
 
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../config/database.php';
 
-// Seul le super-administrateur peut gérer les maisons.
 exigerSuperAdmin();
+
+// La connexion PDO est chargée par auth.php.
+// On utilise également database.php explicitement si nécessaire.
+require_once __DIR__ . '/../config/database.php';
 
 // Créer un jeton CSRF si nécessaire.
 if (empty($_SESSION['csrf_token'])) {
@@ -19,11 +20,20 @@ $requete = $pdo->query(
      ORDER BY id DESC'
 );
 
-$maisons = $requete->fetchAll();
+$maisons = $requete->fetchAll(PDO::FETCH_ASSOC);
 
 // Récupérer le message de confirmation.
 $message = $_SESSION['message'] ?? '';
 unset($_SESSION['message']);
+
+function echapper($valeur): string
+{
+    return htmlspecialchars(
+        (string) ($valeur ?? ''),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+}
 
 ?>
 
@@ -47,7 +57,6 @@ unset($_SESSION['message']);
 
     <main class="main-content">
 
-        <!-- Barre supérieure -->
         <header class="topbar">
 
             <div style="display: flex; align-items: center; gap: 12px;">
@@ -66,59 +75,53 @@ unset($_SESSION['message']);
             </div>
 
             <div class="user-info">
-                <?= htmlspecialchars(
-                    $_SESSION['nom'] ?? '',
-                    ENT_QUOTES,
-                    'UTF-8'
-                ) ?>
+                <?= echapper($_SESSION['nom'] ?? '') ?>
             </div>
 
         </header>
 
-        <!-- Contenu principal -->
         <section class="page-content">
 
             <div class="page-heading">
+
                 <h2>Liste des maisons</h2>
-                <p>Consultez et gérez les biens immobiliers.</p>
+
+                <p>
+                    Consultez et gérez les biens immobiliers.
+                </p>
+
             </div>
 
-            <!-- Message de confirmation -->
             <?php if ($message !== ''): ?>
 
-                <div class="panel">
-                    <?= htmlspecialchars(
-                        $message,
-                        ENT_QUOTES,
-                        'UTF-8'
-                    ) ?>
+                <div class="panel" role="status">
+                    <?= echapper($message) ?>
                 </div>
 
             <?php endif; ?>
 
-            <!-- Bouton d'ajout -->
             <div style="margin-bottom: 20px;">
 
-                <a href="ajouter.php" class="btn">
+                <a href="ajouter.php" class="btn btn-primary">
                     + Ajouter une maison
                 </a>
 
             </div>
 
-            <!-- Tableau des maisons -->
             <section class="panel">
 
-                <?php if (count($maisons) === 0): ?>
+                <?php if (empty($maisons)): ?>
 
                     <p>Aucune maison n'a encore été enregistrée.</p>
 
                 <?php else: ?>
 
-                    <div class="table-container">
+                    <div class="table-responsive">
 
-                        <table>
+                        <table class="table">
 
                             <thead>
+
                                 <tr>
                                     <th>ID</th>
                                     <th>Nom</th>
@@ -128,6 +131,7 @@ unset($_SESSION['message']);
                                     <th>Statut</th>
                                     <th>Actions</th>
                                 </tr>
+
                             </thead>
 
                             <tbody>
@@ -136,65 +140,51 @@ unset($_SESSION['message']);
 
                                     <tr>
 
-                                        <!-- Identifiant -->
                                         <td>
                                             <?= (int) $maison['id'] ?>
                                         </td>
 
-                                        <!-- Nom -->
                                         <td>
-                                            <?= htmlspecialchars(
-                                                $maison['nom'] ?? '',
-                                                ENT_QUOTES,
-                                                'UTF-8'
-                                            ) ?>
+                                            <?= echapper($maison['nom']) ?>
                                         </td>
 
-                                        <!-- Adresse -->
                                         <td>
-                                            <?= htmlspecialchars(
-                                                $maison['adresse'] ?? '',
-                                                ENT_QUOTES,
-                                                'UTF-8'
-                                            ) ?>
+                                            <?= echapper($maison['adresse']) ?>
                                         </td>
 
-                                        <!-- Ville -->
                                         <td>
-                                            <?= htmlspecialchars(
-                                                $maison['ville'] ?? '',
-                                                ENT_QUOTES,
-                                                'UTF-8'
-                                            ) ?>
+                                            <?= echapper($maison['ville']) ?>
                                         </td>
 
-                                        <!-- État actif -->
                                         <td>
+
                                             <?php if ((int) $maison['actif'] === 1): ?>
-                                                <span style="color: green;">
+
+                                                <span class="badge badge-success">
                                                     Oui
                                                 </span>
+
                                             <?php else: ?>
-                                                <span style="color: #dc2626;">
+
+                                                <span class="badge badge-secondary">
                                                     Non
                                                 </span>
+
                                             <?php endif; ?>
+
                                         </td>
 
-                                        <!-- Statut -->
                                         <td>
-                                            <?= htmlspecialchars(
-                                                $maison['statut'] ?? '',
-                                                ENT_QUOTES,
-                                                'UTF-8'
-                                            ) ?>
+                                            <?= echapper($maison['statut']) ?>
                                         </td>
 
-                                        <!-- Actions -->
                                         <td>
 
-                                            <a href="modifier.php?id=<?= (int) $maison['id'] ?>">
-                                                Modifier
+                                            <a
+                                                href="modifier.php?id=<?= (int) $maison['id'] ?>"
+                                                class="btn btn-secondary btn-sm"
+                                            >
+                                                ✏️ Modifier
                                             </a>
 
                                             <?php if ((int) $maison['actif'] === 1): ?>
@@ -215,16 +205,12 @@ unset($_SESSION['message']);
                                                     <input
                                                         type="hidden"
                                                         name="csrf_token"
-                                                        value="<?= htmlspecialchars(
-                                                            $_SESSION['csrf_token'],
-                                                            ENT_QUOTES,
-                                                            'UTF-8'
-                                                        ) ?>"
+                                                        value="<?= echapper($_SESSION['csrf_token']) ?>"
                                                     >
 
                                                     <button
                                                         type="submit"
-                                                        style="border: 0; background: none; color: #dc2626; cursor: pointer;"
+                                                        class="btn btn-danger btn-sm"
                                                     >
                                                         Désactiver
                                                     </button>
@@ -233,7 +219,7 @@ unset($_SESSION['message']);
 
                                             <?php else: ?>
 
-                                                <span style="color: #6b7280;">
+                                                <span class="badge badge-secondary">
                                                     Désactivée
                                                 </span>
 
@@ -255,8 +241,7 @@ unset($_SESSION['message']);
 
             </section>
 
-            <!-- Retour au tableau de bord -->
-            <p>
+            <p style="margin-top: 20px;">
                 <a href="../dashboard.php">
                     ← Retour au tableau de bord
                 </a>
@@ -264,14 +249,14 @@ unset($_SESSION['message']);
 
         </section>
 
+        <?php require_once __DIR__ . '/../includes/footer.php'; ?>
+
     </main>
 
 </div>
 
 <script src="../assets/js/script.js"></script>
-<?php require_once __DIR__ . '/../includes/footer.php'; ?>
-
 
 </body>
+
 </html>
-```

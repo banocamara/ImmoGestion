@@ -8,6 +8,7 @@ exigerSuperAdmin();
 // La désactivation doit obligatoirement passer par POST.
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
+    header('Allow: POST');
     exit('Méthode non autorisée.');
 }
 
@@ -31,25 +32,27 @@ if (!$id || $id < 1) {
     exit('Identifiant de maison invalide.');
 }
 
-// Vérifier que la maison existe.
-$verification = $pdo->prepare(
-    'SELECT id, nom, actif
-     FROM maisons
-     WHERE id = :id'
-);
+try {
+    // Vérifier que la maison existe.
+    $verification = $pdo->prepare(
+        'SELECT id, nom, actif
+         FROM maisons
+         WHERE id = :id
+         LIMIT 1'
+    );
 
-$verification->execute(['id' => $id]);
-$maison = $verification->fetch();
+    $verification->execute(['id' => $id]);
+    $maison = $verification->fetch();
 
-if (!$maison) {
-    http_response_code(404);
-    exit('Maison introuvable.');
-}
+    if (!$maison) {
+        http_response_code(404);
+        exit('Maison introuvable.');
+    }
 
-if ((int) $maison['actif'] === 0) {
-    $_SESSION['message'] = 'Cette maison est déjà désactivée.';
-} else {
-    try {
+    if ((int) $maison['actif'] === 0) {
+        $_SESSION['message'] = 'Cette maison est déjà désactivée.';
+    } else {
+        // Désactiver la maison sans supprimer ses données.
         $requete = $pdo->prepare(
             "UPDATE maisons
              SET actif = 0,
@@ -61,12 +64,15 @@ if ((int) $maison['actif'] === 0) {
         $requete->execute(['id' => $id]);
 
         $_SESSION['message'] = 'La maison a été désactivée. Son historique est conservé.';
-
-    } catch (PDOException $e) {
-        error_log('Erreur de désactivation de maison : ' . $e->getMessage());
-
-        $_SESSION['message'] = 'Impossible de désactiver la maison.';
     }
+
+} catch (PDOException $e) {
+    error_log(
+        'Erreur de désactivation de maison : ' . $e->getMessage()
+    );
+
+    http_response_code(500);
+    $_SESSION['message'] = 'Une erreur est survenue. Impossible de désactiver la maison.';
 }
 
 header('Location: index.php');

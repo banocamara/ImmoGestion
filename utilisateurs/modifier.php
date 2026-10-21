@@ -1,21 +1,21 @@
 <?php
 
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../config/database.php';
 
 exigerConnexion();
 exigerSuperAdmin();
 
+// La session est déjà démarrée par auth.php.
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
-// Créer un jeton CSRF si nécessaire
+// Créer un jeton CSRF si nécessaire.
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Vérifier l'identifiant de l'utilisateur
+// Vérifier l'identifiant de l'utilisateur.
 $id = filter_input(
     INPUT_GET,
     'id',
@@ -28,11 +28,12 @@ if (!$id) {
     exit;
 }
 
-// Récupérer l'utilisateur
+// Récupérer l'utilisateur.
 $stmt = $pdo->prepare(
     "SELECT id, nom, email, role, actif
      FROM utilisateurs
-     WHERE id = ?"
+     WHERE id = ?
+     LIMIT 1"
 );
 
 $stmt->execute([$id]);
@@ -44,8 +45,7 @@ if (!$utilisateur) {
     exit;
 }
 
-// Empêcher la modification de son propre compte depuis cette page
-// pour éviter de se désactiver accidentellement.
+// Empêcher la modification de son propre compte.
 if ((int) $utilisateur['id'] === (int) $_SESSION['utilisateur_id']) {
     header(
         'Location: /ImmoGestion/utilisateurs/index.php?erreur=propre_compte'
@@ -53,9 +53,9 @@ if ((int) $utilisateur['id'] === (int) $_SESSION['utilisateur_id']) {
     exit;
 }
 
-// Récupérer les maisons actives
+// Récupérer les maisons actives.
 $stmt = $pdo->query(
-    "SELECT id, nom
+    "SELECT id, nom, ville
      FROM maisons
      WHERE actif = 1
      ORDER BY nom ASC"
@@ -63,148 +63,299 @@ $stmt = $pdo->query(
 
 $maisons = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Récupérer la maison actuellement attribuée
+// Récupérer toutes les maisons actuellement affectées.
 $stmt = $pdo->prepare(
     "SELECT maison_id
      FROM affectations_admins
-     WHERE utilisateur_id = ?
-     LIMIT 1"
+     WHERE utilisateur_id = ?"
 );
 
 $stmt->execute([$id]);
 
-$maisonActuelle = $stmt->fetchColumn();
+$maisonsActuelles = array_map(
+    'intval',
+    $stmt->fetchAll(PDO::FETCH_COLUMN)
+);
 
-$maisonId = $maisonActuelle === false
-    ? ''
-    : (string) $maisonActuelle;
-
+// Initialiser les valeurs du formulaire.
 $nom = $utilisateur['nom'];
 $email = $utilisateur['email'];
 $actif = (int) $utilisateur['actif'];
 
+$maisonsSelectionnees = $maisonsActuelles;
+
 $erreurs = [];
 
-// Traitement du formulaire
+// Traitement du formulaire.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    // Vérifier le jeton CSRF
+    // Vérifier le jeton CSRF.
     $jeton = $_POST['csrf_token'] ?? '';
 
     if (
         !is_string($jeton) ||
         !hash_equals($_SESSION['csrf_token'], $jeton)
     ) {
-        $erreurs[] = 'Jeton de sécurité invalide. Rechargez la page.';
+        $erreurs[] =
+            'Jeton de sécurité invalide. Rechargez la page.';
     }
 
-    // Récupérer les champs
-    $nom = trim($_POST['nom'] ?? '');
-    $email = trim($_POST['email'] ?? '');
+    // Récupérer les champs.
+    $nomRecu = $_POST['nom'] ?? '';
+    $emailRecu = $_POST['email'] ?? '';
     $nouveauMotDePasse = $_POST['mot_de_passe'] ?? '';
     $confirmation = $_POST['confirmation'] ?? '';
-    $maisonId = $_POST['maison_id'] ?? '';
-
+    $maisonsRecues = $_POST['maisons'] ?? [];
     $actifEnvoye = $_POST['actif'] ?? '';
 
-    // Vérifier le nom
-    if ($nom === '') {
-        $erreurs[] = 'Le nom est obligatoire.';
-    } elseif (mb_strlen($nom) > 100) {
-        $erreurs[] = 'Le nom ne doit pas dépasser 100 caractères.';
-    }
+    // Vérifier les types des données reçues.
+    if (
+        !is_string($nomRecu) ||
+        !is_string($emailRecu) ||
+        !is_string($nouveauMotDePasse) ||
+        !is_string($confirmation) ||
+        !is_array($maisonsRecues) ||
+        !is_string($actifEnvoye)
+    ) {
+        $erreurs[] = 'Les données envoyées sont invalides.';
 
-    // Vérifier l'e-mail
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $erreurs[] = 'Veuillez saisir une adresse e-mail valide.';
-    } elseif (mb_strlen($email) > 150) {
-        $erreurs[] = 'L’adresse e-mail ne doit pas dépasser 150 caractères.';
-    }
-
-    // Vérifier que l'e-mail n'est pas utilisé par un autre compte
-    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $stmt = $pdo->prepare(
-            "SELECT id
-             FROM utilisateurs
-             WHERE email = ? AND id <> ?"
-        );
-
-        $stmt->execute([$email, $id]);
-
-        if ($stmt->fetchColumn()) {
-            $erreurs[] = 'Cette adresse e-mail est déjà utilisée.';
-        }
-    }
-
-    // Vérifier le nouveau mot de passe uniquement s'il est renseigné
-    if ($nouveauMotDePasse !== '') {
-
-        if (
-            !is_string($nouveauMotDePasse) ||
-            strlen($nouveauMotDePasse) < 8
-        ) {
-            $erreurs[] =
-                'Le nouveau mot de passe doit contenir au moins 8 caractères.';
-        }
-
-        if (
-            !is_string($confirmation) ||
-            $nouveauMotDePasse !== $confirmation
-        ) {
-            $erreurs[] = 'Les deux mots de passe ne correspondent pas.';
-        }
-    }
-
-    // Vérifier le statut
-    if (!in_array($actifEnvoye, ['0', '1'], true)) {
-        $erreurs[] = 'Le statut sélectionné est invalide.';
     } else {
-        $actif = (int) $actifEnvoye;
-    }
 
-    // Un super-administrateur ne reçoit pas d'affectation de maison.
-    // Pour un administrateur ordinaire, une maison active est obligatoire.
-    $maisonIdValide = null;
+        $nom = trim($nomRecu);
+        $email = trim($emailRecu);
 
-    if ($utilisateur['role'] === 'admin') {
+        // Vérifier le nom.
+        if ($nom === '') {
+            $erreurs[] = 'Le nom est obligatoire.';
+        } elseif (mb_strlen($nom, 'UTF-8') > 100) {
+            $erreurs[] =
+                'Le nom ne doit pas dépasser 100 caractères.';
+        }
 
-        $maisonIdValide = filter_var(
-            $maisonId,
-            FILTER_VALIDATE_INT,
-            ['options' => ['min_range' => 1]]
-        );
+        // Vérifier l'adresse e-mail.
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $erreurs[] =
+                'Veuillez saisir une adresse e-mail valide.';
+        } elseif (mb_strlen($email, 'UTF-8') > 150) {
+            $erreurs[] =
+                'L’adresse e-mail ne doit pas dépasser 150 caractères.';
+        }
 
-        if ($maisonIdValide === false) {
-            $erreurs[] = 'Veuillez sélectionner une maison.';
-        } else {
+        // Vérifier que l'e-mail n'appartient pas à un autre compte.
+        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+
             $stmt = $pdo->prepare(
                 "SELECT id
-                 FROM maisons
-                 WHERE id = ? AND actif = 1"
+                 FROM utilisateurs
+                 WHERE email = ?
+                   AND id <> ?
+                 LIMIT 1"
             );
 
-            $stmt->execute([$maisonIdValide]);
+            $stmt->execute([$email, $id]);
 
-            if (!$stmt->fetchColumn()) {
+            if ($stmt->fetchColumn()) {
                 $erreurs[] =
-                    'La maison sélectionnée est introuvable ou inactive.';
+                    'Cette adresse e-mail est déjà utilisée.';
             }
+        }
+
+        // Vérifier le nouveau mot de passe, s'il est renseigné.
+        if ($nouveauMotDePasse !== '') {
+
+            if (strlen($nouveauMotDePasse) < 8) {
+                $erreurs[] =
+                    'Le nouveau mot de passe doit contenir '
+                    . 'au moins 8 caractères.';
+            }
+
+            if ($nouveauMotDePasse !== $confirmation) {
+                $erreurs[] =
+                    'Les deux mots de passe ne correspondent pas.';
+            }
+        }
+
+        // Vérifier le statut.
+        if (!in_array($actifEnvoye, ['0', '1'], true)) {
+            $erreurs[] = 'Le statut sélectionné est invalide.';
+        } else {
+            $actif = (int) $actifEnvoye;
+        }
+
+        // Vérifier les maisons sélectionnées pour un administrateur.
+        if ($utilisateur['role'] === 'admin') {
+
+            $maisonsSelectionnees = [];
+
+            if (count($maisonsRecues) === 0) {
+                $erreurs[] =
+                    'Veuillez sélectionner au moins une maison.';
+            }
+
+            foreach ($maisonsRecues as $maisonIdRecu) {
+
+                if (
+                    !is_string($maisonIdRecu) &&
+                    !is_int($maisonIdRecu)
+                ) {
+                    $erreurs[] =
+                        'La sélection des maisons est invalide.';
+                    break;
+                }
+
+                $maisonIdValide = filter_var(
+                    $maisonIdRecu,
+                    FILTER_VALIDATE_INT,
+                    ['options' => ['min_range' => 1]]
+                );
+
+                if ($maisonIdValide === false) {
+                    $erreurs[] =
+                        'Un identifiant de maison est invalide.';
+                    break;
+                }
+
+                $maisonsSelectionnees[] = (int) $maisonIdValide;
+            }
+
+            // Supprimer les doublons.
+            $maisonsSelectionnees = array_values(
+                array_unique($maisonsSelectionnees)
+            );
+
+            // Vérifier que toutes les maisons sélectionnées sont actives.
+            if (
+                !empty($maisonsSelectionnees) &&
+                count($maisonsSelectionnees) === count($maisonsRecues)
+            ) {
+                $placeholders = implode(
+                    ',',
+                    array_fill(0, count($maisonsSelectionnees), '?')
+                );
+
+                $stmt = $pdo->prepare(
+                    "SELECT id
+                     FROM maisons
+                     WHERE actif = 1
+                       AND id IN ($placeholders)"
+                );
+
+                $stmt->execute($maisonsSelectionnees);
+
+                $maisonsValides = array_map(
+                    'intval',
+                    $stmt->fetchAll(PDO::FETCH_COLUMN)
+                );
+
+                $maisonsATester = $maisonsSelectionnees;
+
+                sort($maisonsValides);
+                sort($maisonsATester);
+
+                if ($maisonsValides !== $maisonsATester) {
+                    $erreurs[] =
+                        'Une ou plusieurs maisons sélectionnées '
+                        . 'sont introuvables ou inactives.';
+                }
+            }
+
+        } else {
+
+            // Un super-administrateur n'a pas besoin d'affectations.
+            $maisonsSelectionnees = [];
         }
     }
 
-    // Enregistrer les modifications
+    // Enregistrer les modifications si aucune erreur.
     if (empty($erreurs)) {
 
         try {
             $pdo->beginTransaction();
 
-            // Modifier les informations principales
+            // Vérifier que le compte existe toujours.
+            $stmt = $pdo->prepare(
+                "SELECT id
+                 FROM utilisateurs
+                 WHERE id = ?
+                 FOR UPDATE"
+            );
+
+            $stmt->execute([$id]);
+
+            if (!$stmt->fetchColumn()) {
+                throw new RuntimeException(
+                    'Cet utilisateur n’existe plus.'
+                );
+            }
+
+            // Revérifier les maisons avant de modifier les affectations.
+            if (
+                $utilisateur['role'] === 'admin' &&
+                !empty($maisonsSelectionnees)
+            ) {
+                $placeholders = implode(
+                    ',',
+                    array_fill(0, count($maisonsSelectionnees), '?')
+                );
+
+                $stmt = $pdo->prepare(
+                    "SELECT id
+                     FROM maisons
+                     WHERE actif = 1
+                       AND id IN ($placeholders)
+                     FOR UPDATE"
+                );
+
+                $stmt->execute($maisonsSelectionnees);
+
+                $maisonsVerifiees = array_map(
+                    'intval',
+                    $stmt->fetchAll(PDO::FETCH_COLUMN)
+                );
+
+                $maisonsATester = $maisonsSelectionnees;
+
+                sort($maisonsVerifiees);
+                sort($maisonsATester);
+
+                if ($maisonsVerifiees !== $maisonsATester) {
+                    throw new RuntimeException(
+                        'Une maison sélectionnée est devenue inactive '
+                        . 'ou n’existe plus. Rechargez la page.'
+                    );
+                }
+            }
+
+            // Vérifier à nouveau l'unicité de l'e-mail.
+            $stmt = $pdo->prepare(
+                "SELECT id
+                 FROM utilisateurs
+                 WHERE email = ?
+                   AND id <> ?
+                 LIMIT 1"
+            );
+
+            $stmt->execute([$email, $id]);
+
+            if ($stmt->fetchColumn()) {
+                throw new RuntimeException(
+                    'Cette adresse e-mail est déjà utilisée.'
+                );
+            }
+
+            // Modifier les informations du compte.
             if ($nouveauMotDePasse !== '') {
 
                 $motDePasseHache = password_hash(
                     $nouveauMotDePasse,
                     PASSWORD_DEFAULT
                 );
+
+                if ($motDePasseHache === false) {
+                    throw new RuntimeException(
+                        'Le hachage du mot de passe a échoué.'
+                    );
+                }
 
                 $stmt = $pdo->prepare(
                     "UPDATE utilisateurs
@@ -241,10 +392,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
 
-            // Mettre à jour l'affectation pour un administrateur
+            // Remplacer toutes les affectations de l'administrateur.
             if ($utilisateur['role'] === 'admin') {
 
-                // Supprimer les anciennes affectations
+                // Supprimer les anciennes affectations.
                 $stmt = $pdo->prepare(
                     "DELETE FROM affectations_admins
                      WHERE utilisateur_id = ?"
@@ -252,43 +403,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $stmt->execute([$id]);
 
-                // Enregistrer la nouvelle affectation
-                $stmt = $pdo->prepare(
+                // Enregistrer toutes les nouvelles affectations.
+                $stmtAffectation = $pdo->prepare(
                     "INSERT INTO affectations_admins
                         (utilisateur_id, maison_id)
                      VALUES (?, ?)"
                 );
 
-                $stmt->execute([
-                    $id,
-                    $maisonIdValide
-                ]);
+                foreach ($maisonsSelectionnees as $maisonId) {
+                    $stmtAffectation->execute([
+                        $id,
+                        $maisonId
+                    ]);
+                }
             }
 
+            // Valider toutes les modifications.
             $pdo->commit();
 
-            // Renouveler le jeton CSRF
+            // Renouveler le jeton CSRF.
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
             header(
-                'Location: /ImmoGestion/utilisateurs/index.php?succes=modification'
+                'Location: /ImmoGestion/utilisateurs/index.php'
+                . '?succes=modification'
             );
 
             exit;
 
-        } catch (PDOException $e) {
+        } catch (Throwable $e) {
 
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
 
             error_log(
-                'Erreur modification utilisateur : ' . $e->getMessage()
+                'Erreur modification utilisateur : '
+                . $e->getMessage()
             );
 
-            $erreurs[] =
-                'Une erreur est survenue lors de la modification. '
-                . 'Vérifiez les données et réessayez.';
+            if ($e instanceof RuntimeException) {
+                $erreurs[] = $e->getMessage();
+
+            } elseif (
+                $e instanceof PDOException &&
+                $e->getCode() === '23000'
+            ) {
+                $erreurs[] =
+                    'Cette adresse e-mail est déjà utilisée '
+                    . 'ou une affectation identique existe déjà.';
+
+            } else {
+                $erreurs[] =
+                    'Une erreur est survenue lors de la modification. '
+                    . 'Vérifiez les données et réessayez.';
+            }
         }
     }
 }
@@ -313,8 +482,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <h2>Informations du compte</h2>
 
                 <p>
-                    Modifiez les informations de l'utilisateur et sa maison
-                    d'affectation.
+                    Modifiez les informations de l'utilisateur
+                    et les maisons qu'il est autorisé à gérer.
                 </p>
             </div>
 
@@ -403,7 +572,8 @@ require_once __DIR__ . '/../includes/header.php';
                         >
 
                         <small>
-                            Laissez ce champ vide pour conserver le mot de passe actuel.
+                            Laissez ce champ vide pour conserver
+                            le mot de passe actuel.
                         </small>
 
                     </div>
@@ -428,36 +598,85 @@ require_once __DIR__ . '/../includes/header.php';
 
                         <div class="form-group">
 
-                            <label for="maison_id">Maison à gérer *</label>
+                            <label>Maisons à gérer *</label>
 
-                            <select
-                                id="maison_id"
-                                name="maison_id"
-                                required
-                            >
+                            <p>
+                                Cochez toutes les maisons que cet
+                                administrateur doit pouvoir gérer.
+                            </p>
 
-                                <option value="">
-                                    -- Sélectionner une maison --
-                                </option>
+                            <?php if (!empty($maisons)): ?>
 
-                                <?php foreach ($maisons as $maison): ?>
+                                <div style="
+                                    display: grid;
+                                    grid-template-columns:
+                                        repeat(auto-fit, minmax(220px, 1fr));
+                                    gap: 12px;
+                                    margin-top: 12px;
+                                ">
 
-                                    <option
-                                        value="<?= (int) $maison['id'] ?>"
-                                        <?= (string) $maisonId === (string) $maison['id']
-                                            ? 'selected'
-                                            : '' ?>
-                                    >
-                                        <?= htmlspecialchars(
-                                            $maison['nom'],
-                                            ENT_QUOTES,
-                                            'UTF-8'
-                                        ) ?>
-                                    </option>
+                                    <?php foreach ($maisons as $maison): ?>
 
-                                <?php endforeach; ?>
+                                        <label style="
+                                            display: flex;
+                                            align-items: flex-start;
+                                            gap: 10px;
+                                            padding: 12px;
+                                            border: 1px solid #ddd;
+                                            border-radius: 8px;
+                                            cursor: pointer;
+                                        ">
 
-                            </select>
+                                            <input
+                                                type="checkbox"
+                                                name="maisons[]"
+                                                value="<?= (int) $maison['id'] ?>"
+                                                <?= in_array(
+                                                    (int) $maison['id'],
+                                                    $maisonsSelectionnees,
+                                                    true
+                                                ) ? 'checked' : '' ?>
+                                            >
+
+                                            <span>
+
+                                                <strong>
+                                                    <?= htmlspecialchars(
+                                                        $maison['nom'],
+                                                        ENT_QUOTES,
+                                                        'UTF-8'
+                                                    ) ?>
+                                                </strong>
+
+                                                <?php if (!empty($maison['ville'])): ?>
+                                                    <br>
+
+                                                    <small>
+                                                        <?= htmlspecialchars(
+                                                            $maison['ville'],
+                                                            ENT_QUOTES,
+                                                            'UTF-8'
+                                                        ) ?>
+                                                    </small>
+                                                <?php endif; ?>
+
+                                            </span>
+
+                                        </label>
+
+                                    <?php endforeach; ?>
+
+                                </div>
+
+                            <?php else: ?>
+
+                                <div class="alert alert-danger">
+                                    Aucune maison active n'est disponible.
+                                    Activez ou créez une maison avant
+                                    de modifier les affectations.
+                                </div>
+
+                            <?php endif; ?>
 
                         </div>
 
@@ -505,9 +724,16 @@ require_once __DIR__ . '/../includes/header.php';
 
                     </div>
 
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <div style="
+                        display: flex;
+                        gap: 10px;
+                        flex-wrap: wrap;
+                    ">
 
-                        <button type="submit" class="btn btn-primary">
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                        >
                             💾 Enregistrer les modifications
                         </button>
 

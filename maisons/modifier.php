@@ -5,10 +5,16 @@ require_once __DIR__ . '/../config/database.php';
 
 exigerSuperAdmin();
 
+// Initialisation
 $message = '';
 $maison = null;
 
-// Vérifier l'identifiant transmis dans l'URL.
+// Créer un jeton CSRF s'il n'existe pas
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Vérifier l'identifiant transmis
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -20,50 +26,49 @@ if (!$id || $id < 1) {
     exit('Identifiant de maison invalide.');
 }
 
-// Récupérer la maison.
-$requete = $pdo->prepare(
-    'SELECT id, nom, adresse, ville, description, actif, statut
-     FROM maisons
-     WHERE id = :id'
-);
+try {
+    // Récupérer la maison
+    $requete = $pdo->prepare(
+        'SELECT id, nom, adresse, ville, description, actif, statut
+         FROM maisons
+         WHERE id = :id
+         LIMIT 1'
+    );
 
-$requete->execute(['id' => $id]);
-$maison = $requete->fetch();
+    $requete->execute(['id' => $id]);
+    $maison = $requete->fetch();
 
-if (!$maison) {
-    http_response_code(404);
-    exit('Maison introuvable.');
-}
+    if (!$maison) {
+        http_response_code(404);
+        exit('Maison introuvable.');
+    }
 
-// Traiter le formulaire.
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Traiter le formulaire
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $token = $_POST['csrf_token'] ?? '';
+        $token = $_POST['csrf_token'] ?? '';
 
-    if (
-        !is_string($token)
-        || !isset($_SESSION['csrf_token'])
-        || !hash_equals($_SESSION['csrf_token'], $token)
-    ) {
-        $message = 'Votre session a expiré. Veuillez réessayer.';
-    } else {
-
-        $nom = trim($_POST['nom'] ?? '');
-        $adresse = trim($_POST['adresse'] ?? '');
-        $ville = trim($_POST['ville'] ?? '');
-        $description = trim($_POST['description'] ?? '');
-
-        if ($nom === '' || $ville === '') {
-            $message = 'Le nom et la ville sont obligatoires.';
-        } elseif (
-            mb_strlen($nom) > 150
-            || mb_strlen($ville) > 100
-            || mb_strlen($adresse) > 255
+        if (
+            !is_string($token)
+            || !isset($_SESSION['csrf_token'])
+            || !hash_equals($_SESSION['csrf_token'], $token)
         ) {
-            $message = 'Certains champs sont trop longs.';
+            $message = 'Votre session a expiré. Veuillez réessayer.';
         } else {
+            $nom = trim($_POST['nom'] ?? '');
+            $adresse = trim($_POST['adresse'] ?? '');
+            $ville = trim($_POST['ville'] ?? '');
+            $description = trim($_POST['description'] ?? '');
 
-            try {
+            if ($nom === '' || $ville === '') {
+                $message = 'Le nom et la ville sont obligatoires.';
+            } elseif (
+                mb_strlen($nom, 'UTF-8') > 150
+                || mb_strlen($ville, 'UTF-8') > 100
+                || mb_strlen($adresse, 'UTF-8') > 255
+            ) {
+                $message = 'Certains champs dépassent la longueur autorisée.';
+            } else {
                 $requete = $pdo->prepare(
                     'UPDATE maisons
                      SET nom = :nom,
@@ -86,19 +91,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 header('Location: index.php');
                 exit;
-
-            } catch (PDOException $e) {
-                error_log('Erreur de modification de maison : ' . $e->getMessage());
-                $message = 'Impossible de modifier la maison.';
             }
-        }
 
-        // Conserver les valeurs saisies si la validation échoue.
-        $maison['nom'] = $nom;
-        $maison['adresse'] = $adresse;
-        $maison['ville'] = $ville;
-        $maison['description'] = $description;
+            // Conserver les valeurs saisies en cas d'erreur
+            $maison['nom'] = $nom;
+            $maison['adresse'] = $adresse;
+            $maison['ville'] = $ville;
+            $maison['description'] = $description;
+        }
     }
+
+} catch (PDOException $e) {
+    error_log('Erreur dans maisons/modifier.php : ' . $e->getMessage());
+
+    http_response_code(500);
+    exit('Une erreur est survenue lors du traitement de la maison.');
 }
 
 ?>
@@ -110,24 +117,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-```
 <title>Modifier une maison - ImmoGestion</title>
 
 <link rel="stylesheet" href="../assets/css/style.css">
-```
 
 </head>
+
 <body>
 
 <div class="app-layout">
 
-```
 <?php require_once __DIR__ . '/../includes/navbar.php'; ?>
 
 <main class="main-content">
 
     <header class="topbar">
         <div style="display:flex; align-items:center; gap:12px;">
+
             <button
                 type="button"
                 class="menu-toggle"
@@ -136,18 +142,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             >☰</button>
 
             <h1>Modifier une maison</h1>
+
         </div>
     </header>
 
     <section class="page-content">
 
         <div class="page-heading">
-            <h2>Modification : <?= htmlspecialchars($maison['nom'], ENT_QUOTES, 'UTF-8') ?></h2>
+            <h2>
+                Modification :
+                <?= htmlspecialchars($maison['nom'], ENT_QUOTES, 'UTF-8') ?>
+            </h2>
+
             <p>Modifiez les informations de cette maison.</p>
         </div>
 
         <?php if ($message !== ''): ?>
-            <div class="alert" role="alert">
+            <div class="alert alert-danger" role="alert">
                 <?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?>
             </div>
         <?php endif; ?>
@@ -165,11 +176,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input
                     type="hidden"
                     name="csrf_token"
-                    value="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                    value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>"
                 >
 
                 <div class="form-group">
                     <label for="nom">Nom de la maison *</label>
+
                     <input
                         type="text"
                         id="nom"
@@ -182,6 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group">
                     <label for="adresse">Adresse</label>
+
                     <input
                         type="text"
                         id="adresse"
@@ -193,6 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group">
                     <label for="ville">Ville *</label>
+
                     <input
                         type="text"
                         id="ville"
@@ -205,6 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group">
                     <label for="description">Description</label>
+
                     <textarea
                         id="description"
                         name="description"
@@ -213,11 +228,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ><?= htmlspecialchars($maison['description'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
                 </div>
 
-                <button type="submit" class="btn">
+                <button type="submit" class="btn btn-primary">
                     Enregistrer les modifications
                 </button>
 
-                <a href="index.php" style="margin-left:12px;">
+                <a href="index.php" class="btn btn-secondary" style="margin-left:12px;">
                     Annuler
                 </a>
 
@@ -228,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </section>
 
 </main>
-```
+
 
 </div>
 
