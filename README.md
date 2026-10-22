@@ -144,8 +144,11 @@ ImmoGestion/
 ├── utilisateurs/
 │
 ├── dashboard.php
-├── index.php
 └── README.md
+├── login.php
+└── logout.md
+├── .gitignore
+
 ```
 
 *Remarque : cette arborescence présente les principaux dossiers. Certains fichiers supplémentaires peuvent exister dans chaque module.*
