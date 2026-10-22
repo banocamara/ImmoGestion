@@ -157,7 +157,7 @@ ImmoGestion/
 Avant de lancer le projet, installez :
 
 * [XAMPP](https://www.apachefriends.org/) pour Apache, PHP et MySQL/MariaDB.
-* [Git](https://git-scm.com/) pour récupérer le code source.
+* [Git](https://github.com/banocamara/ImmoGestion.git) pour récupérer le code source.
 * Un navigateur web récent.
 
 ### 1. Récupérer le projet
