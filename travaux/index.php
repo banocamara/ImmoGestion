@@ -1,42 +1,86 @@
 <?php
 
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../config/database.php';
 
 exigerConnexion();
 
-// Génération du jeton CSRF
+// Le fichier auth.php charge déjà la connexion à la base de données.
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+// Génération du jeton CSRF.
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-// Récupérer les travaux avec les informations associées
-$sql = "
-    SELECT
-        t.id,
-        t.titre,
-        t.description,
-        t.montant,
-        t.date_travail,
-        t.statut,
-        m.nom AS maison_nom,
-        a.numero AS appartement_numero,
-        u.nom AS utilisateur_nom
-    FROM travaux t
-    INNER JOIN maisons m ON t.maison_id = m.id
-    LEFT JOIN appartements a ON t.appartement_id = a.id
-    LEFT JOIN utilisateurs u ON t.enregistre_par = u.id
-    ORDER BY t.date_travail DESC, t.id DESC
-";
+$estSuperAdmin = estSuperAdmin();
+$utilisateurId = (int) $_SESSION['utilisateur_id'];
 
-$stmt = $pdo->query($sql);
+// Récupérer uniquement les travaux autorisés.
+if ($estSuperAdmin) {
+
+    // Le super-administrateur voit tous les travaux.
+    $sql = "
+        SELECT
+            t.id,
+            t.titre,
+            t.description,
+            t.montant,
+            t.date_travail,
+            t.statut,
+            t.maison_id,
+            t.appartement_id,
+            m.nom AS maison_nom,
+            a.numero AS appartement_numero,
+            u.nom AS utilisateur_nom
+        FROM travaux t
+        INNER JOIN maisons m ON t.maison_id = m.id
+        LEFT JOIN appartements a ON t.appartement_id = a.id
+        LEFT JOIN utilisateurs u ON t.enregistre_par = u.id
+        ORDER BY t.date_travail DESC, t.id DESC
+    ";
+
+    $stmt = $pdo->query($sql);
+
+} else {
+
+    // L'administrateur voit uniquement les travaux
+    // des maisons qui lui sont attribuées.
+    $sql = "
+        SELECT
+            t.id,
+            t.titre,
+            t.description,
+            t.montant,
+            t.date_travail,
+            t.statut,
+            t.maison_id,
+            t.appartement_id,
+            m.nom AS maison_nom,
+            a.numero AS appartement_numero,
+            u.nom AS utilisateur_nom
+        FROM travaux t
+        INNER JOIN maisons m ON t.maison_id = m.id
+        LEFT JOIN appartements a ON t.appartement_id = a.id
+        LEFT JOIN utilisateurs u ON t.enregistre_par = u.id
+        INNER JOIN affectations_admins aa
+            ON aa.maison_id = t.maison_id
+        WHERE aa.utilisateur_id = :utilisateur_id
+          AND m.actif = 1
+        ORDER BY t.date_travail DESC, t.id DESC
+    ";
+
+    $stmt = $pdo->prepare($sql);
+
+    $stmt->execute([
+        'utilisateur_id' => $utilisateurId
+    ]);
+}
+
 $travaux = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Calcul des statistiques
+// Calcul des statistiques sur les travaux autorisés.
 $stats = [
     'total' => count($travaux),
     'prevu' => 0,
@@ -46,6 +90,7 @@ $stats = [
 ];
 
 foreach ($travaux as $travail) {
+
     if (isset($stats[$travail['statut']])) {
         $stats[$travail['statut']]++;
     }
@@ -53,20 +98,20 @@ foreach ($travaux as $travail) {
     $stats['montant'] += (float) $travail['montant'];
 }
 
-// Formater les montants en MRU
+// Formater les montants en MRU.
 function formaterMontant($montant)
 {
     return number_format((float) $montant, 0, ',', ' ') . ' MRU';
 }
 
-// Libellés et classes CSS des statuts
+// Libellés et classes CSS des statuts.
 $statuts = [
     'prevu' => ['Prévu', 'badge-warning'],
     'en_cours' => ['En cours', 'badge-info'],
     'termine' => ['Terminé', 'badge-success']
 ];
 
-// Messages de confirmation
+// Messages de confirmation.
 $messages = [
     'ajout' => 'Le travail a été ajouté avec succès.',
     'modification' => 'Le travail a été modifié avec succès.',
@@ -96,8 +141,13 @@ require_once __DIR__ . '/../includes/header.php';
 
                 <div>
                     <h2>Travaux immobiliers</h2>
+
                     <p>
-                        Suivez les réparations et les dépenses de vos biens.
+                        <?php if ($estSuperAdmin): ?>
+                            Consultez et gérez les travaux de toutes les maisons.
+                        <?php else: ?>
+                            Consultez et gérez les travaux de vos maisons attribuées.
+                        <?php endif; ?>
                     </p>
                 </div>
 
@@ -111,26 +161,39 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
 
             <?php if ($messageSucces !== ''): ?>
+
                 <div class="alert alert-success">
-                    <?= htmlspecialchars($messageSucces) ?>
+                    <?= htmlspecialchars(
+                        $messageSucces,
+                        ENT_QUOTES,
+                        'UTF-8'
+                    ) ?>
                 </div>
+
             <?php endif; ?>
 
             <?php if (isset($_GET['erreur'])): ?>
+
                 <div class="alert alert-danger">
+
                     <?php
                     $erreurs = [
                         'id' => 'Identifiant de travail invalide.',
-                        'introuvable' => 'Le travail demandé est introuvable.'
+                        'introuvable' => 'Le travail demandé est introuvable.',
+                        'acces' => 'Vous n’êtes pas autorisé à accéder à ce travail.'
                     ];
 
                     $codeErreur = $_GET['erreur'];
 
                     echo htmlspecialchars(
-                        $erreurs[$codeErreur] ?? 'Une erreur est survenue.'
+                        $erreurs[$codeErreur] ?? 'Une erreur est survenue.',
+                        ENT_QUOTES,
+                        'UTF-8'
                     );
                     ?>
+
                 </div>
+
             <?php endif; ?>
 
             <!-- Statistiques -->
@@ -212,31 +275,58 @@ require_once __DIR__ . '/../includes/header.php';
 
                                         <td>
                                             <strong>
-                                                <?= htmlspecialchars($travail['titre']) ?>
+                                                <?= htmlspecialchars(
+                                                    $travail['titre'],
+                                                    ENT_QUOTES,
+                                                    'UTF-8'
+                                                ) ?>
                                             </strong>
 
                                             <?php if (!empty($travail['description'])): ?>
                                                 <br>
+
                                                 <small>
-                                                    <?= nl2br(htmlspecialchars($travail['description'])) ?>
+                                                    <?= nl2br(
+                                                        htmlspecialchars(
+                                                            $travail['description'],
+                                                            ENT_QUOTES,
+                                                            'UTF-8'
+                                                        )
+                                                    ) ?>
                                                 </small>
                                             <?php endif; ?>
                                         </td>
 
                                         <td>
-                                            <?= htmlspecialchars($travail['maison_nom']) ?>
+                                            <?= htmlspecialchars(
+                                                $travail['maison_nom'],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>
                                         </td>
 
                                         <td>
-                                            <?php if ($travail['appartement_numero'] !== null): ?>
-                                                <?= htmlspecialchars($travail['appartement_numero']) ?>
+                                            <?php if (
+                                                $travail['appartement_numero'] !== null
+                                            ): ?>
+
+                                                <?= htmlspecialchars(
+                                                    $travail['appartement_numero'],
+                                                    ENT_QUOTES,
+                                                    'UTF-8'
+                                                ) ?>
+
                                             <?php else: ?>
+
                                                 Toute la maison
+
                                             <?php endif; ?>
                                         </td>
 
                                         <td>
-                                            <?= formaterMontant($travail['montant']) ?>
+                                            <?= formaterMontant(
+                                                $travail['montant']
+                                            ) ?>
                                         </td>
 
                                         <td>
@@ -247,15 +337,25 @@ require_once __DIR__ . '/../includes/header.php';
                                         </td>
 
                                         <td>
-                                            <span class="badge <?= htmlspecialchars($statut[1]) ?>">
-                                                <?= htmlspecialchars($statut[0]) ?>
+                                            <span class="badge <?= htmlspecialchars(
+                                                $statut[1],
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            ) ?>">
+                                                <?= htmlspecialchars(
+                                                    $statut[0],
+                                                    ENT_QUOTES,
+                                                    'UTF-8'
+                                                ) ?>
                                             </span>
                                         </td>
 
                                         <td>
                                             <?= htmlspecialchars(
                                                 $travail['utilisateur_nom']
-                                                ?? 'Utilisateur inconnu'
+                                                ?? 'Utilisateur inconnu',
+                                                ENT_QUOTES,
+                                                'UTF-8'
                                             ) ?>
                                         </td>
 
@@ -268,7 +368,7 @@ require_once __DIR__ . '/../includes/header.php';
                                                 Modifier
                                             </a>
 
-                                            <?php if (estSuperAdmin()): ?>
+                                            <?php if ($estSuperAdmin): ?>
 
                                                 <form
                                                     method="POST"
@@ -286,7 +386,11 @@ require_once __DIR__ . '/../includes/header.php';
                                                     <input
                                                         type="hidden"
                                                         name="csrf_token"
-                                                        value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>"
+                                                        value="<?= htmlspecialchars(
+                                                            $_SESSION['csrf_token'],
+                                                            ENT_QUOTES,
+                                                            'UTF-8'
+                                                        ) ?>"
                                                     >
 
                                                     <button
@@ -323,4 +427,3 @@ require_once __DIR__ . '/../includes/header.php';
     </main>
 
 </div>
-
