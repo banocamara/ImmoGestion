@@ -168,10 +168,8 @@ Avant de lancer le projet, installez :
 Ouvrez Git Bash ou un terminal, puis exécutez :
 
 ```bash
-git clone URL_DE_VOTRE_DEPOT
+git clone https://github.com/banocamara/ImmoGestion.git
 ```
-
-Remplacez `URL_DE_VOTRE_DEPOT` par l'adresse HTTPS réelle de votre dépôt GitHub.
 
 ### 2. Placer le projet
 
