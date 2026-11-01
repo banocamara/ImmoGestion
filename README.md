@@ -1,130 +1,177 @@
-# 🏠 ImmoGestion
+# 🏢 ImmoGestion
 
-**ImmoGestion** est une application web de gestion immobilière conçue pour faciliter la gestion de plusieurs maisons, appartements et locataires. Elle permet de centraliser les informations, de suivre les loyers et les paiements, et d'enregistrer les travaux et les dépenses liés aux biens immobiliers.
+**ImmoGestion** est une application web de gestion immobilière développée dans le cadre de mon parcours en Génie Logiciel et Administration Réseaux (GLAR).
 
-Le projet vise à simplifier le travail des gestionnaires immobiliers grâce à une interface centralisée et à un système de gestion des accès.
+L'application permet de centraliser et de simplifier la gestion des maisons, des appartements, des locataires, des locations, des paiements et des travaux immobiliers.
+
+L'objectif est de faciliter le suivi administratif et financier d'un patrimoine immobilier à travers une interface simple, claire et accessible.
+
+---
 
 ## 📌 Sommaire
 
-* [Présentation](#-présentation)
-* [Fonctionnalités](#-fonctionnalités)
-* [Technologies utilisées](#-technologies-utilisées)
-* [Rôles des utilisateurs](#-rôles-des-utilisateurs)
-* [Structure du projet](#-structure-du-projet)
-* [Installation](#-installation)
-* [Configuration de la base de données](#-configuration-de-la-base-de-données)
-* [Lancement de l'application](#-lancement-de-lapplication)
-* [Sécurité](#-sécurité)
-* [Améliorations futures](#-améliorations-futures)
-* [Auteur](#-auteur)
-* [Licence](#-licence)
+- Présentation du projet
+- Fonctionnalités principales
+- Technologies utilisées
+- Gestion des utilisateurs
+- Structure du projet
+- Installation
+- Configuration de la base de données
+- Sécurité
+- Auteur
 
-## 📖 Présentation
+---
 
-ImmoGestion est un projet de développement web destiné à la gestion locative.
+## 🎯 Présentation du projet
 
-L'application permet notamment de :
+ImmoGestion est une application web conçue pour accompagner les propriétaires et les gestionnaires immobiliers dans leurs activités quotidiennes.
 
-* Organiser les biens immobiliers par maison et par appartement.
-* Enregistrer les locataires et leurs locations.
-* Suivre les paiements des loyers.
-* Consulter les soldes et l'état des loyers.
-* Enregistrer les travaux réalisés ou prévus.
-* Suivre les dépenses liées aux travaux.
-* Gérer les utilisateurs et leurs autorisations.
+Elle permet notamment de :
 
-L'objectif est de rendre la gestion immobilière plus simple, structurée et efficace.
+- Gérer plusieurs maisons.
+- Enregistrer les appartements associés à chaque maison.
+- Gérer les informations des locataires.
+- Enregistrer et suivre les contrats de location.
+- Enregistrer les paiements des loyers.
+- Consulter les soldes et les loyers restants.
+- Suivre les travaux et les dépenses immobilières.
+- Consulter un tableau de bord présentant les principales statistiques.
 
-## ✨ Fonctionnalités
+L'application utilise le MRU comme monnaie de référence.
 
-### 🏢 Gestion immobilière
+---
 
-* Gestion des maisons.
-* Gestion des appartements associés à chaque maison.
-* Activation et désactivation des biens immobiliers.
-* Organisation des biens par maison et par appartement.
+## ✨ Fonctionnalités principales
 
-### 👥 Gestion des locataires
+### 1. Tableau de bord
 
-* Enregistrement des locataires.
-* Gestion des informations des locataires.
-* Association des locataires aux locations.
+- Affichage du nombre de maisons actives.
+- Affichage du nombre d'appartements actifs.
+- Suivi des appartements libres et occupés.
+- Nombre de locataires actifs.
+- Suivi des utilisateurs actifs pour le super-administrateur.
+- Affichage des loyers encaissés.
+- Calcul des loyers attendus et restants.
+- Affichage des dépenses de travaux.
+- Consultation des derniers paiements enregistrés.
 
-### 📝 Gestion des locations
+### 2. Gestion immobilière
 
-* Enregistrement des locations.
-* Association des locataires aux appartements.
-* Suivi des informations relatives aux locations.
+- Ajout de maisons.
+- Modification des informations des maisons.
+- Désactivation des maisons.
+- Ajout d'appartements.
+- Modification des appartements.
+- Désactivation des appartements.
+- Suivi de l'occupation des appartements.
 
-### 💰 Gestion des paiements
+### 3. Gestion des locataires
 
-* Enregistrement des paiements.
-* Consultation de l'historique des paiements.
-* Annulation des paiements selon les autorisations prévues par l'application.
-* Suivi des loyers et des soldes.
+- Enregistrement des locataires.
+- Consultation des informations des locataires.
+- Modification des informations.
+- Gestion de leur statut.
 
-### 🔧 Gestion des travaux et des dépenses
+### 4. Gestion des locations
 
-* Enregistrement des travaux.
-* Association des travaux à une maison ou à un appartement.
-* Suivi du montant, de la date et du statut des travaux.
-* Gestion des dépenses liées aux travaux.
+- Création d'une location.
+- Association d'un locataire à un appartement.
+- Définition du loyer mensuel.
+- Enregistrement des dates de location.
+- Modification des informations d'une location.
+- Suivi du statut des locations.
 
-### 🔐 Gestion des utilisateurs
+### 5. Gestion des paiements
 
-* Gestion des comptes utilisateurs.
-* Différenciation entre super-administrateur et administrateur.
-* Attribution de plusieurs maisons à un même administrateur.
-* Restriction de l'accès aux maisons selon les affectations.
+- Enregistrement des paiements.
+- Association des paiements aux locations.
+- Enregistrement du montant et de la période payée.
+- Gestion des modes de paiement.
+- Consultation de l'historique des paiements.
+- Annulation d'un paiement.
+- Suivi des loyers payés et restants.
 
-## 🛠️ Technologies utilisées
+### 6. Gestion des travaux et des dépenses
 
-| Technologie     | Utilisation                                              |
-| --------------- | -------------------------------------------------------- |
-| PHP             | Logique serveur et traitement des formulaires            |
-| MySQL / MariaDB | Stockage des données                                     |
-| HTML5           | Structure des pages web                                  |
-| CSS3            | Mise en forme et interface utilisateur                   |
-| JavaScript      | Interactions et filtrage dynamique des formulaires       |
-| PDO             | Connexion à la base de données et requêtes SQL préparées |
-| Apache          | Serveur web local                                        |
-| XAMPP           | Environnement de développement                           |
-| Git             | Gestion des versions                                     |
-| GitHub          | Hébergement du code source                               |
+- Enregistrement des travaux.
+- Association des travaux à une maison.
+- Association facultative à un appartement.
+- Enregistrement du montant des travaux.
+- Définition de la date des travaux.
+- Suivi de leur état d'avancement.
+- Consultation des dépenses.
 
-## 👤 Rôles des utilisateurs
+### 7. Gestion des utilisateurs
+
+- Création des comptes utilisateurs.
+- Modification des informations des utilisateurs.
+- Activation et désactivation des comptes.
+- Attribution de plusieurs maisons à un administrateur.
+- Gestion des rôles et des accès.
+
+---
+
+## 👥 Gestion des utilisateurs et des rôles
+
+L'application possède deux rôles principaux.
 
 ### Super-administrateur
 
-Le super-administrateur dispose d'un accès global à la gestion de l'application.
+Le super-administrateur dispose d'un accès global à l'application.
 
-Selon les fonctionnalités disponibles, il peut :
+Il peut :
 
-* Gérer les maisons et les appartements.
-* Gérer les locataires.
-* Consulter les locations et les paiements.
-* Consulter les travaux et les dépenses.
-* Gérer les utilisateurs.
-* Attribuer plusieurs maisons aux administrateurs.
+- Gérer les maisons.
+- Gérer les appartements.
+- Gérer les locataires.
+- Gérer les locations.
+- Gérer les paiements.
+- Gérer les travaux et les dépenses.
+- Créer et gérer les utilisateurs.
+- Affecter plusieurs maisons à un administrateur.
 
 ### Administrateur
 
-L'administrateur intervient uniquement sur les maisons qui lui sont attribuées.
+L'administrateur intervient uniquement sur les maisons qui lui sont affectées.
 
 Il peut notamment :
 
-* Consulter les locations et les paiements autorisés.
-* Enregistrer et suivre les travaux des maisons auxquelles il a accès.
-* Consulter les informations permises par son rôle.
+- Consulter les informations de ses maisons.
+- Gérer les locations autorisées.
+- Enregistrer les paiements.
+- Consulter les soldes.
+- Enregistrer et suivre les travaux de ses maisons.
 
-Les autorisations sont contrôlées côté serveur.
+Les autorisations sont également vérifiées côté serveur.
+
+---
+
+## 🛠️ Technologies utilisées
+
+| Technologie | Utilisation |
+|---|---|
+| PHP | Développement de la logique côté serveur |
+| MySQL / MariaDB | Gestion de la base de données |
+| HTML5 | Structure des pages |
+| CSS3 | Mise en forme et design |
+| JavaScript | Interactions côté navigateur |
+| PDO | Connexion et communication avec la base de données |
+| XAMPP | Environnement de développement local |
+| Visual Studio Code | Éditeur de code |
+| Git et GitHub | Gestion des versions et hébergement du code |
+
+---
 
 ## 📁 Structure du projet
 
-La structure principale du projet est organisée par modules :
-
-```text
 ImmoGestion/
+│
+├── assets/
+│   ├── css/
+│   │   └── style.css
+│   │
+│   └── js/
+│       └── script.js
 │
 ├── config/
 │   └── database.php
@@ -136,150 +183,146 @@ ImmoGestion/
 │   └── footer.php
 │
 ├── maisons/
+│
 ├── appartements/
+│
 ├── locataires/
+│
 ├── locations/
+│
 ├── paiements/
+│
 ├── travaux/
+│
 ├── utilisateurs/
 │
 ├── dashboard.php
-└── README.md
 ├── login.php
-└── logout.md
-├── .gitignore
+├── logout.php
+├── README.md
+└── immogestion.sql
 
-```
+*Remarque : cette structure présente les principaux dossiers et fichiers. Certains fichiers peuvent varier selon la version du projet.*
 
-*Remarque : cette arborescence présente les principaux dossiers. Certains fichiers supplémentaires peuvent exister dans chaque module.*
+---
 
-## ⚙️ Installation
+## ⚙️ Installation du projet
 
 ### Prérequis
 
-Avant de lancer le projet, installez :
+Avant de commencer, il faut installer :
 
-* [XAMPP](https://www.apachefriends.org/) pour Apache, PHP et MySQL/MariaDB.
-* [Git](https://github.com/banocamara/ImmoGestion.git) pour récupérer le code source.
-* Un navigateur web récent.
+* Windows 10 ou Windows 11.
+* XAMPP.
+* PHP.
+* MySQL ou MariaDB.
+* Un navigateur web.
+* Visual Studio Code.
 
-### 1. Récupérer le projet
+### Étape 1 : Récupérer le projet
 
-Ouvrez Git Bash ou un terminal, puis exécutez :
+Cloner le dépôt GitHub :
 
-```bash
+
 git clone https://github.com/banocamara/ImmoGestion.git
-```
 
-### 2. Placer le projet
 
-Placez le dossier `ImmoGestion` dans le répertoire :
+Ou télécharger directement le projet depuis GitHub.
 
-```text
+### Étape 2 : Installer le projet dans XAMPP
+
+Placer le dossier `ImmoGestion` dans :
+
 C:\xampp\htdocs\
-```
 
-Le chemin final devrait être :
+Le chemin final doit être :
 
-```text
-C:\xampp\htdocs\ImmoGestion\
-```
+C:\xampp\htdocs\ImmoGestion
 
-Si vous avez déjà le projet dans ce dossier, cette étape n'est pas nécessaire.
+### Étape 3 : Démarrer XAMPP
 
-### 3. Démarrer XAMPP
+Ouvrir le panneau de contrôle XAMPP et démarrer :
 
-Ouvrez le panneau de contrôle XAMPP et démarrez :
+* Apache
+* MySQL
 
-* **Apache**
-* **MySQL**
+### Étape 4 : Créer la base de données
 
-### 4. Créer la base de données
+1. Ouvrir phpMyAdmin.
+2. Créer une base de données nommée `immogestion`.
+3. Sélectionner cette base de données.
+4. Importer le fichier SQL du projet, s'il est présent.
 
-Ouvrez phpMyAdmin :
+### Étape 5 : Configurer la connexion
 
-```text
-http://localhost/phpmyadmin/
-```
+Ouvrir le fichier :
 
-Créez une base de données nommée :
-
-```text
-immogestion
-```
-
-Importez ensuite le fichier SQL du projet s'il est présent dans le dépôt.
-
-Si aucun fichier SQL n'est fourni, vous devrez créer les tables nécessaires avant de lancer l'application.
-
-### 5. Configurer la connexion
-
-Ouvrez le fichier :
-
-```text
 config/database.php
-```
 
-Renseignez les paramètres correspondant à votre environnement local :
+Vérifier les paramètres de connexion à la base de données :
 
-* Hôte de la base de données.
-* Nom de la base de données.
-* Nom d'utilisateur MySQL.
-* Mot de passe MySQL.
+$host = 'localhost';
+$dbname = 'immogestion';
+$username = 'root';
+$password = '';
 
-**Important :** ne publiez jamais de mots de passe ou d'identifiants réels dans un dépôt public.
+Ces valeurs sont données à titre d'exemple et doivent correspondre à la configuration de votre environnement.
 
-### 6. Lancer l'application
+### Étape 6 : Lancer l'application
 
-Dans votre navigateur, ouvrez :
+Ouvrir un navigateur et accéder à :
 
-```text
 http://localhost/ImmoGestion/
-```
 
-Connectez-vous avec un compte utilisateur déjà créé dans la base de données.
+---
 
 ## 🔐 Sécurité
 
-Le projet met en œuvre ou prévoit plusieurs mécanismes de sécurité :
+Plusieurs mécanismes de sécurité sont utilisés dans l'application :
 
 * Authentification des utilisateurs.
-* Contrôle des autorisations selon les rôles.
-* Vérification des affectations des administrateurs aux maisons.
-* Requêtes SQL préparées avec PDO.
-* Protection CSRF des formulaires concernés.
-* Validation des données côté serveur.
-* Échappement des données affichées dans les pages.
+* Gestion des rôles et des autorisations.
+* Requêtes préparées avec PDO.
+* Protection contre les injections SQL.
+* Échappement des données affichées avec `htmlspecialchars()`.
+* Protection CSRF sur les opérations concernées.
+* Gestion des sessions PHP.
+* Vérification des accès aux ressources selon les maisons affectées.
 
-La sécurité doit être vérifiée sur chaque module avant toute mise en production.
+---
 
-## 🚀 Améliorations futures
+## 💻 Environnement de développement
 
-Les évolutions envisagées peuvent inclure :
+Le projet a été développé dans un environnement local avec :
 
-* Amélioration du tableau de bord et des statistiques.
-* Génération de reçus de paiement en PDF.
-* Génération de rapports financiers.
-* Notifications pour les loyers impayés.
-* Amélioration de l'affichage sur mobile.
-* Renforcement des tests et de la sécurité.
-* Déploiement sur un serveur de production.
+* Système d'exploitation : Windows 11.
+* Serveur local : XAMPP.
+* Langage serveur : PHP.
+* Base de données : MySQL / MariaDB.
+* Éditeur : Visual Studio Code.
 
-## 👨‍💻 Auteur
+---
+
+## 👨‍💻 Développeur
 
 **Bano Camara**
 
-Étudiant en Génie Logiciel et Administration Réseaux (GLAR) à l'ESTM.
+Étudiant en Licence 3  
+Génie Logiciel et Administration Réseaux (GLAR)  
+École Supérieure de Technologie et de Management (ESTM)
 
-Centres d'intérêt :
+Développeur et concepteur de l'application ImmoGestion.
 
-* Développement web.
-* Programmation.
-* Administration réseaux.
-* Cybersécurité.
+Ce projet est né d'un besoin réel exprimé par un client souhaitant disposer d'une solution numérique pour faciliter la gestion de ses activités immobilières.
 
-## 📄 Licence
+Cette collaboration représente également une occasion de mettre en pratique mes compétences en développement web, d'approfondir mes connaissances et de développer une solution répondant à des besoins concrets.
 
-Ce projet est développé dans un cadre d'apprentissage et de gestion immobilière.
+---
 
-Aucune licence open source n'est actuellement spécifiée. Les conditions de réutilisation du code devront être définies avant sa redistribution.
+## 📄 Licence et droits d'utilisation
+
+ImmoGestion est une application développée dans le cadre d'une collaboration avec un client.
+
+Les droits d'utilisation, de modification, de distribution et de propriété du code source sont soumis aux conditions convenues entre le développeur et le client.
+
+Toute reproduction ou réutilisation du projet sans autorisation préalable est déconseillée.

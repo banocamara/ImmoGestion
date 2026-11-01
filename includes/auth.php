@@ -43,7 +43,7 @@ function exigerConnexion(): void
 
     // Si personne n'est connecté, rediriger vers la connexion.
     if (!estConnecte()) {
-        header('Location: /ImmoGestion/auth/login.php');
+        header('Location: /ImmoGestion/login.php');
         exit;
     }
 
@@ -90,7 +90,7 @@ function exigerConnexion(): void
 
             // Rediriger vers la connexion.
             header(
-                'Location: /ImmoGestion/auth/login.php?erreur=compte_inactif'
+                'Location: /ImmoGestion/login.php?erreur=compte_inactif'
             );
             exit;
         }
